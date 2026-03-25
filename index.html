@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTA Province Guesser</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- ===== МЕНЮ ===== -->
+    <div class="screen screen--menu active" id="screenMenu">
+        <div class="particles"></div>
+        <div class="menu">
+            <div class="menu__logo">
+                <span class="menu__icon">🗺️</span>
+                <h1 class="menu__title">MTA Province<br><span>Guesser</span></h1>
+            </div>
+            <p class="menu__subtitle">Угадай, где ты находишься на карте Province!</p>
+            <div class="menu__form">
+                <div class="input-group">
+                    <input type="text" id="nickname" class="input" placeholder=" " maxlength="20">
+                    <label class="input-label">Никнейм</label>
+                    <span class="input-icon">👤</span>
+                </div>
+                <div class="menu__settings">
+                    <div class="setting">
+                        <span class="setting__label">Раундов</span>
+                        <div class="setting__options" id="roundOptions">
+                            <button class="setting__btn" data-value="3">3</button>
+                            <button class="setting__btn active" data-value="5">5</button>
+                            <button class="setting__btn" data-value="10">10</button>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn--primary btn--large" id="btnStart">
+                    <span class="btn__icon">🎮</span> Начать игру
+                </button>
+                <button class="btn btn--ghost" id="btnHowToPlay">
+                    <span class="btn__icon">❓</span> Как играть
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== КАК ИГРАТЬ ===== -->
+    <div class="modal" id="modalHowTo">
+        <div class="modal__backdrop"></div>
+        <div class="modal__content">
+            <button class="modal__close" id="btnCloseHowTo">&times;</button>
+            <h2 class="modal__title">Как играть?</h2>
+            <div class="how-to">
+                <div class="how-to__step">
+                    <div class="how-to__number">1</div>
+                    <div class="how-to__text">
+                        <h3>Осмотрись</h3>
+                        <p>Крути обзор мышкой на 360°. Приближай колёсиком. Ищи подсказки.</p>
+                    </div>
+                </div>
+                <div class="how-to__step">
+                    <div class="how-to__number">2</div>
+                    <div class="how-to__text">
+                        <h3>Поставь метку</h3>
+                        <p>Открой карту (кнопка или M) и кликни туда, где сделан снимок.</p>
+                    </div>
+                </div>
+                <div class="how-to__step">
+                    <div class="how-to__number">3</div>
+                    <div class="how-to__text">
+                        <h3>Получи очки</h3>
+                        <p>Чем ближе — тем больше! Максимум 5,000 за раунд.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ИГРА ===== -->
+    <div class="screen screen--game" id="screenGame">
+
+        <!-- HUD -->
+        <div class="hud">
+            <div class="hud__left">
+                <div class="hud__round">
+                    <span class="hud__round-current" id="hudRound">1</span>
+                    <span class="hud__round-sep">/</span>
+                    <span class="hud__round-total" id="hudTotalRounds">5</span>
+                </div>
+                <span class="hud__label">Раунд</span>
+            </div>
+            <div class="hud__right">
+                <div class="hud__score" id="hudScore">0</div>
+                <span class="hud__label">Очки</span>
+            </div>
+        </div>
+
+        <!-- ПАНОРАМА -->
+        <div class="panorama" id="panorama">
+            <div class="panorama__viewport" id="panoramaViewport">
+                <img src="" alt="panorama" class="panorama__img" id="panoramaImg" draggable="false">
+            </div>
+        </div>
+
+        <!-- Кнопка карты -->
+        <button class="btn-open-map" id="btnOpenMap">
+            <span>🗺️</span>
+            <span>Открыть карту</span>
+            <kbd>M</kbd>
+        </button>
+
+        <!-- Панель карты -->
+        <div class="map-panel" id="mapPanel">
+            <div class="map-panel__header">
+                <span class="map-panel__title">📍 Выберите место</span>
+                <div class="map-panel__tools">
+                    <button class="map-panel__tool" id="btnMapZoomIn">+</button>
+                    <button class="map-panel__tool" id="btnMapZoomOut">−</button>
+                    <button class="map-panel__tool" id="btnMapFit">⊡</button>
+                </div>
+                <button class="map-panel__close" id="btnCloseMap">&times;</button>
+            </div>
+            <div class="map-panel__body" id="mapBody">
+                <div class="map-container" id="mapContainer">
+                    <img src="map.jpg" alt="Map" class="map-container__img" id="mapImage" draggable="false">
+                    <div class="map-marker hidden" id="mapMarker">
+                        <div class="map-marker__pin"></div>
+                        <div class="map-marker__pulse"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="map-panel__footer">
+                <span class="map-panel__coords" id="mapCoords">X: — Y: —</span>
+                <button class="btn btn--danger btn--guess" id="btnGuess" disabled>📍 Угадать!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== РЕЗУЛЬТАТ РАУНДА ===== -->
+    <div class="screen screen--round-result" id="screenRoundResult">
+        <div class="round-result">
+            <div class="round-result__card">
+                <div class="round-result__emoji" id="resultEmoji">🎯</div>
+                <h2 class="round-result__title" id="resultTitle">Отлично!</h2>
+                <p class="round-result__location" id="resultLocation">Центр города</p>
+                <div class="round-result__stats">
+                    <div class="round-result__stat">
+                        <span class="round-result__stat-value" id="resultDistance">127</span>
+                        <span class="round-result__stat-unit">м</span>
+                        <span class="round-result__stat-label">Расстояние</span>
+                    </div>
+                    <div class="round-result__stat round-result__stat--score">
+                        <span class="round-result__stat-value" id="resultScore">4,873</span>
+                        <span class="round-result__stat-label">Очков</span>
+                    </div>
+                </div>
+                <div class="round-result__progress">
+                    <div class="score-dots" id="scoreDots"></div>
+                    <span class="round-result__total">Всего: <strong id="resultTotalScore">4,873</strong></span>
+                </div>
+                <button class="btn btn--primary btn--large" id="btnNextRound">Следующий раунд →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ФИНАЛ ===== -->
+    <div class="screen screen--final" id="screenFinal">
+        <div class="final">
+            <div class="final__card">
+                <div class="final__header">
+                    <div class="final__rank-emoji" id="finalEmoji">🏆</div>
+                    <h1 class="final__title">Игра окончена!</h1>
+                    <p class="final__rank-text" id="finalRankText">Мастер Province!</p>
+                </div>
+                <div class="final__score-section">
+                    <div class="final__score">
+                        <span class="final__score-value" id="finalScore">0</span>
+                        <span class="final__score-max" id="finalScoreMax">/ 25,000</span>
+                    </div>
+                    <div class="final__score-bar">
+                        <div class="final__score-fill" id="finalScoreFill" style="width:0%"></div>
+                    </div>
+                    <span class="final__percentage" id="finalPercentage">0%</span>
+                </div>
+                <div class="final__actions">
+                    <button class="btn btn--primary btn--large" id="btnPlayAgain">🔄 Играть снова</button>
+                    <button class="btn btn--ghost" id="btnShare">📋 Поделиться</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast hidden" id="toast"><span>✅</span><span>Скопировано!</span></div>
+
+    <script src="points.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
