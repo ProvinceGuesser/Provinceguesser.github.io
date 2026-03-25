@@ -457,6 +457,33 @@ function startGame() {
         initMap();
     }, 100);
 }
+// ===== ПОКАЗ РЕЗУЛЬТАТА НА КАРТЕ =====
+function showResultOnMap(guessX, guessY, actualX, actualY) {
+    const guessPercX = ((guessX + 3000) / 6000) * 100;
+    const guessPercY = ((3000 - guessY) / 6000) * 100;
+    const actualPercX = ((actualX + 3000) / 6000) * 100;
+    const actualPercY = ((3000 - actualY) / 6000) * 100;
+
+    $('resultPinGuess').style.left = guessPercX + '%';
+    $('resultPinGuess').style.top = guessPercY + '%';
+
+    $('resultPinActual').style.left = actualPercX + '%';
+    $('resultPinActual').style.top = actualPercY + '%';
+
+    $('resultLinePath').setAttribute('x1', guessPercX);
+    $('resultLinePath').setAttribute('y1', guessPercY);
+    $('resultLinePath').setAttribute('x2', actualPercX);
+    $('resultLinePath').setAttribute('y2', actualPercY);
+
+    // Перезапуск анимаций
+    const g = $('resultPinGuess');
+    const a = $('resultPinActual');
+    g.style.animation = 'none';
+    a.style.animation = 'none';
+    void g.offsetWidth;
+    g.style.animation = '';
+    a.style.animation = '';
+}
 
 function makeGuess() {
     if (!currentPoint || !markerPlaced) return;
@@ -495,6 +522,11 @@ function makeGuess() {
     preloadNextRound();
     $('mapPanel').classList.remove('active');
     showScreen('screenRoundResult');
+
+    // Показываем точки на карте результата
+    setTimeout(() => {
+        showResultOnMap(guessX, guessY, actualX, actualY);
+    }, 100);
 }
 
 function nextRound() {

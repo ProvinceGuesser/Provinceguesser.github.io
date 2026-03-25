@@ -154,6 +154,29 @@
                         <span class="round-result__stat-label">Очков</span>
                     </div>
                 </div>
+
+                <!-- КАРТА РЕЗУЛЬТАТА -->
+                <!-- КАРТА РЕЗУЛЬТАТА -->
+                <div class="result-map" id="resultMap">
+                    <img src="map.jpg" alt="Map" class="result-map__img" draggable="false">
+
+                    <svg class="result-map__line" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <line id="resultLinePath" x1="0" y1="0" x2="0" y2="0"
+                            stroke="#ffaa00" stroke-width="0.5"
+                            stroke-dasharray="1.5,1" opacity="0.8"/>
+                    </svg>
+
+                    <div class="result-pin result-pin--guess" id="resultPinGuess">
+                        <div class="result-pin__dot"></div>
+                        <div class="result-pin__label">Вы</div>
+                    </div>
+
+                    <div class="result-pin result-pin--actual" id="resultPinActual">
+                        <div class="result-pin__dot"></div>
+                        <div class="result-pin__label">Ответ</div>
+                    </div>
+                </div>
+
                 <div class="round-result__progress">
                     <div class="score-dots" id="scoreDots"></div>
                     <span class="round-result__total">Всего: <strong id="resultTotalScore">4,873</strong></span>
