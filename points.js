@@ -35,7 +35,7 @@ const allPoints = [
         x: -1462,
         y: 2734,
         name: "Жуковский (ТЦ Татьяна)",
-        panorama: "screenshots/point_005.png"
+        panorama: "screenshots/point_005.jpg"
     },
     {
         id: 6,
