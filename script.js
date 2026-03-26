@@ -459,30 +459,88 @@ function startGame() {
 }
 // ===== ПОКАЗ РЕЗУЛЬТАТА НА КАРТЕ =====
 function showResultOnMap(guessX, guessY, actualX, actualY) {
-    const guessPercX = ((guessX + 3000) / 6000) * 100;
-    const guessPercY = ((3000 - guessY) / 6000) * 100;
-    const actualPercX = ((actualX + 3000) / 6000) * 100;
-    const actualPercY = ((3000 - actualY) / 6000) * 100;
+    const zoomEl = $('resultMapZoom');
+    const mapEl = $('resultMap');
 
-    $('resultPinGuess').style.left = guessPercX + '%';
-    $('resultPinGuess').style.top = guessPercY + '%';
+    // Игровые координаты → проценты
+    const gx = ((guessX + 3000) / 6000) * 100;
+    const gy = ((3000 - guessY) / 6000) * 100;
+    const ax = ((actualX + 3000) / 6000) * 100;
+    const ay = ((3000 - actualY) / 6000) * 100;
 
-    $('resultPinActual').style.left = actualPercX + '%';
-    $('resultPinActual').style.top = actualPercY + '%';
+    // Центр между точками
+    const cx = (gx + ax) / 2;
+    const cy = (gy + ay) / 2;
 
-    $('resultLinePath').setAttribute('x1', guessPercX);
-    $('resultLinePath').setAttribute('y1', guessPercY);
-    $('resultLinePath').setAttribute('x2', actualPercX);
-    $('resultLinePath').setAttribute('y2', actualPercY);
+    // Расстояние
+    const span = Math.max(Math.abs(gx - ax), Math.abs(gy - ay));
 
-    // Перезапуск анимаций
-    const g = $('resultPinGuess');
-    const a = $('resultPinActual');
-    g.style.animation = 'none';
-    a.style.animation = 'none';
-    void g.offsetWidth;
-    g.style.animation = '';
-    a.style.animation = '';
+    // Зум — чтобы точки + отступ помещались
+    const padding = 15;
+    let zoom = Math.min(15, Math.max(1, 80 / Math.max(span + padding * 2, 5)));
+    zoom = Math.round(zoom * 10) / 10;
+
+    // Размер зумленной карты в % от контейнера
+    const zoomedSize = 100 * zoom;
+
+    // Позиция: сдвигаем так чтобы cx,cy были в центре видимой области
+    // cx% от карты должен быть на 50% контейнера
+    let left = 50 - cx * zoom;
+    let top = 50 - cy * zoom;
+
+    // Ограничиваем чтобы карта не выходила за края
+    const minLeft = 100 - zoomedSize;  // максимально влево
+    const minTop = 100 - zoomedSize;
+
+    left = Math.max(minLeft, Math.min(0, left));
+    top = Math.max(minTop, Math.min(0, top));
+
+    const counterScale = 1 / zoom;
+
+    // Маркеры
+    const pinG = $('resultPinGuess');
+    const pinA = $('resultPinActual');
+
+    pinG.style.left = gx + '%';
+    pinG.style.top = gy + '%';
+    pinG.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
+
+    pinA.style.left = ax + '%';
+    pinA.style.top = ay + '%';
+    pinA.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
+
+    // Линия
+    const line = $('resultLinePath');
+    line.setAttribute('x1', gx);
+    line.setAttribute('y1', gy);
+    line.setAttribute('x2', ax);
+    line.setAttribute('y2', ay);
+    line.setAttribute('stroke-width', 0.5 / zoom);
+    line.setAttribute('stroke-dasharray', `${1.5 / zoom},${1 / zoom}`);
+
+    // Сброс — показываем всю карту
+    zoomEl.style.transition = 'none';
+    zoomEl.style.width = '100%';
+    zoomEl.style.height = '100%';
+    zoomEl.style.left = '0%';
+    zoomEl.style.top = '0%';
+    zoomEl.getBoundingClientRect();
+
+    // Анимации маркеров
+    pinG.style.animation = 'none';
+    pinA.style.animation = 'none';
+    pinG.getBoundingClientRect();
+    pinG.style.animation = '';
+    pinA.style.animation = '';
+
+    // Зум с задержкой
+    setTimeout(() => {
+        zoomEl.style.transition = 'all 1s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        zoomEl.style.width = zoomedSize + '%';
+        zoomEl.style.height = zoomedSize + '%';
+        zoomEl.style.left = left + '%';
+        zoomEl.style.top = top + '%';
+    }, 500);
 }
 
 function makeGuess() {
@@ -523,7 +581,6 @@ function makeGuess() {
     $('mapPanel').classList.remove('active');
     showScreen('screenRoundResult');
 
-    // Показываем точки на карте результата
     setTimeout(() => {
         showResultOnMap(guessX, guessY, actualX, actualY);
     }, 100);
