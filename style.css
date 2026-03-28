@@ -464,3 +464,221 @@ html, body {
 
 .result-pin--guess .result-pin__label { background: rgba(255,68,68,0.85); }
 .result-pin--actual .result-pin__label { background: rgba(34,180,85,0.85); }
+
+/* ===== ТАБЛИЦА ЛИДЕРОВ ===== */
+.screen--leaderboard {
+    flex-direction: column;
+    background: var(--bg-primary);
+    overflow-y: auto;
+}
+
+.leaderboard {
+    max-width: 600px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 24px 20px 40px;
+}
+
+.leaderboard__header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.leaderboard__title {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.btn--back {
+    padding: 8px 14px;
+    font-size: 0.8rem;
+}
+
+/* ===== ПОДИУМ ===== */
+.podium {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 28px;
+    padding: 10px 0;
+}
+
+.podium__place {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 90px;
+}
+
+.podium__crown {
+    font-size: 1.3rem;
+    animation: crownBounce 2s ease-in-out infinite;
+}
+
+@keyframes crownBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+.podium__medal {
+    font-size: 2rem;
+}
+
+.podium__name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.podium__score {
+    font-size: 0.75rem;
+    color: var(--warning);
+    font-weight: 700;
+}
+
+.podium__block {
+    width: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: rgba(255,255,255,0.15);
+    border-radius: 8px 8px 0 0;
+}
+
+.podium__place--1 .podium__block {
+    height: 90px;
+    background: linear-gradient(180deg, rgba(255,215,0,0.25), rgba(255,215,0,0.08));
+    border: 1px solid rgba(255,215,0,0.25);
+}
+
+.podium__place--2 .podium__block {
+    height: 65px;
+    background: linear-gradient(180deg, rgba(192,192,192,0.2), rgba(192,192,192,0.08));
+    border: 1px solid rgba(192,192,192,0.2);
+}
+
+.podium__place--3 .podium__block {
+    height: 50px;
+    background: linear-gradient(180deg, rgba(205,127,50,0.2), rgba(205,127,50,0.08));
+    border: 1px solid rgba(205,127,50,0.2);
+}
+
+/* ===== СПИСОК ===== */
+.leaderboard__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.leaderboard__empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 30px;
+    font-size: 0.9rem;
+}
+
+.leaderboard__row {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    transition: .2s;
+    gap: 12px;
+}
+
+.leaderboard__row:hover {
+    background: rgba(255,255,255,0.04);
+    border-color: var(--border);
+}
+
+.leaderboard__row--highlight {
+    border-color: var(--accent);
+    background: rgba(0,150,255,0.08);
+}
+
+.leaderboard__pos {
+    width: 28px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.leaderboard__row-name {
+    flex: 1;
+    font-size: 0.9rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leaderboard__row-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.leaderboard__row-score {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--warning);
+}
+
+.leaderboard__row-details {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+    .podium__block { width: 65px; }
+    .podium__place--1 .podium__block { height: 70px; }
+    .podium__place--2 .podium__block { height: 50px; }
+    .podium__place--3 .podium__block { height: 38px; }
+    .podium__medal { font-size: 1.5rem; }
+    .podium__place { min-width: 70px; }
+}
+
+/* Вкладки раундов */
+.lb-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+}
+
+.lb-tab {
+    flex: 1;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.lb-tab:hover { color: var(--text); }
+
+.lb-tab.active {
+    background: var(--accent);
+    color: #fff;
+}

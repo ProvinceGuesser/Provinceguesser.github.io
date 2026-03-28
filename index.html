@@ -40,6 +40,9 @@
                 <button class="btn btn--ghost" id="btnHowToPlay">
                     <span class="btn__icon">❓</span> Как играть
                 </button>
+                <button class="btn btn--ghost" id="btnLeaderboard">
+                    <span class="btn__icon">🏆</span> Лидеры
+                </button>
             </div>
         </div>
     </div>
@@ -209,13 +212,60 @@
                 <div class="final__actions">
                     <button class="btn btn--primary btn--large" id="btnPlayAgain">🔄 Играть снова</button>
                     <button class="btn btn--ghost" id="btnShare">📋 Поделиться</button>
+                    <button class="btn btn--ghost" id="btnFinalLb">🏆 Таблица лидеров</button>
                 </div>
             </div>
         </div>
     </div>
+    <!-- ===== ТАБЛИЦА ЛИДЕРОВ ===== -->
+
+<div class="screen screen--leaderboard" id="screenLeaderboard">
+    <div class="leaderboard">
+        <div class="leaderboard__header">
+            <button class="btn btn--ghost btn--back" id="btnLbBack">← Назад</button>
+            <h1 class="leaderboard__title">🏆 Таблица лидеров</h1>
+        </div>
+
+        <!-- Вкладки раундов -->
+        <div class="lb-tabs">
+            <button class="lb-tab" data-rounds="3">3 раунда</button>
+            <button class="lb-tab active" data-rounds="5">5 раундов</button>
+            <button class="lb-tab" data-rounds="10">10 раундов</button>
+        </div>
+
+        <!-- Подиум -->
+        <div class="podium" id="podium">
+            <div class="podium__place podium__place--2" id="podium2">
+                <div class="podium__medal">🥈</div>
+                <span class="podium__name">—</span>
+                <span class="podium__score">—</span>
+                <div class="podium__block">2</div>
+            </div>
+            <div class="podium__place podium__place--1" id="podium1">
+                <div class="podium__crown">👑</div>
+                <div class="podium__medal">🥇</div>
+                <span class="podium__name">—</span>
+                <span class="podium__score">—</span>
+                <div class="podium__block">1</div>
+            </div>
+            <div class="podium__place podium__place--3" id="podium3">
+                <div class="podium__medal">🥉</div>
+                <span class="podium__name">—</span>
+                <span class="podium__score">—</span>
+                <div class="podium__block">3</div>
+            </div>
+        </div>
+
+        <!-- Список -->
+        <div class="leaderboard__list" id="leaderboardList">
+            <div class="leaderboard__empty">Загрузка...</div>
+        </div>
+    </div>
+</div>
 
     <div class="toast hidden" id="toast"><span>✅</span><span>Скопировано!</span></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="points.js"></script>
     <script src="script.js"></script>
 </body>

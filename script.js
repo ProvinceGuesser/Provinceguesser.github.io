@@ -675,3 +675,145 @@ $('btnShare')?.addEventListener('click', () => {
     t.classList.remove('hidden');
     setTimeout(() => t.classList.add('hidden'), 2500);
 });
+
+// ===== ТАБЛИЦА ЛИДЕРОВ =====
+
+// ===== SUPABASE =====
+// ВСТАВЬ СВОИ КЛЮЧИ:
+const SUPABASE_URL = 'https://nftichzrxjkgqporlivb.supabase.co/';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mdGljaHpyeGprZ3Fwb3JsaXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2OTY4NjgsImV4cCI6MjA5MDI3Mjg2OH0.rRUa-58ZEro9yus16R1nJTMSZVsoZlg-wHZL1QoGxrM';                 
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentLbRounds = 5; // активная вкладка
+
+// Сохранить результат
+async function saveScore(nickname, score, rounds) {
+    try {
+        await db.from('leaderboard').insert({
+            nickname: nickname,
+            score: score,
+            rounds: rounds,
+            max_score: rounds * 5000
+        });
+    } catch (err) {
+        console.error('Ошибка сохранения:', err);
+    }
+}
+
+// Загрузить таблицу по кол-ву раундов
+async function loadLeaderboard(rounds) {
+    try {
+        const { data, error } = await db
+            .from('leaderboard')
+            .select('*')
+            .eq('rounds', rounds)
+            .order('score', { ascending: false })
+            .limit(50);
+
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('Ошибка загрузки:', err);
+        return [];
+    }
+}
+
+// Отрисовать таблицу
+async function renderLeaderboard(highlightNickname, rounds) {
+    if (rounds !== undefined) currentLbRounds = rounds;
+
+    // Обновляем активную вкладку
+    document.querySelectorAll('.lb-tab').forEach(t => {
+        t.classList.toggle('active', parseInt(t.dataset.rounds) === currentLbRounds);
+    });
+
+    const list = $('leaderboardList');
+    list.innerHTML = '<div class="leaderboard__empty">Загрузка...</div>';
+
+    // Сброс подиума
+    for (let i = 1; i <= 3; i++) {
+        const p = $('podium' + i);
+        p.querySelector('.podium__name').textContent = '—';
+        p.querySelector('.podium__score').textContent = '—';
+        p.style.opacity = '0.3';
+    }
+
+    const entries = await loadLeaderboard(currentLbRounds);
+
+    // Подиум (топ-3)
+    for (let i = 0; i < Math.min(3, entries.length); i++) {
+        const p = $('podium' + (i + 1));
+        const pct = Math.round((entries[i].score / entries[i].max_score) * 100);
+        p.querySelector('.podium__name').textContent = entries[i].nickname;
+        p.querySelector('.podium__score').textContent = entries[i].score.toLocaleString();
+        p.style.opacity = '1';
+    }
+
+    // Список
+    if (entries.length === 0) {
+        list.innerHTML = `<div class="leaderboard__empty">
+            Нет результатов для ${currentLbRounds} раундов.<br>Сыграй первым!
+        </div>`;
+        return;
+    }
+
+    list.innerHTML = '';
+
+    entries.forEach((e, i) => {
+        const isMe = highlightNickname &&
+            e.nickname.toLowerCase() === highlightNickname.toLowerCase();
+        const pct = Math.round((e.score / e.max_score) * 100);
+        const dateStr = new Date(e.created_at).toLocaleDateString('ru-RU');
+
+        const row = document.createElement('div');
+        row.className = 'leaderboard__row' + (isMe ? ' leaderboard__row--highlight' : '');
+        row.innerHTML = `
+            <span class="leaderboard__pos">${getMedal(i)}</span>
+            <span class="leaderboard__row-name">${isMe ? '→ ' : ''}${e.nickname}</span>
+            <div class="leaderboard__row-info">
+                <span class="leaderboard__row-score">${e.score.toLocaleString()}</span>
+                <span class="leaderboard__row-details">${pct}% · ${dateStr}</span>
+            </div>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function getMedal(i) {
+    if (i === 0) return '🥇';
+    if (i === 1) return '🥈';
+    if (i === 2) return '🥉';
+    return i + 1;
+}
+
+// Сохраняем результат
+const _originalShowFinal = showFinalResults;
+showFinalResults = function () {
+    _originalShowFinal();
+    const nickname = $('nickname').value.trim() || 'Игрок';
+    saveScore(nickname, totalScore, totalRounds);
+};
+
+// Кнопки
+$('btnLeaderboard')?.addEventListener('click', () => {
+    renderLeaderboard(null, totalRounds || 5);
+    showScreen('screenLeaderboard');
+});
+
+$('btnFinalLb')?.addEventListener('click', () => {
+    const nick = $('nickname').value.trim() || 'Игрок';
+    renderLeaderboard(nick, totalRounds);
+    showScreen('screenLeaderboard');
+});
+
+$('btnLbBack')?.addEventListener('click', () => showScreen('screenMenu'));
+
+// Вкладки лидерборда
+document.querySelectorAll('.lb-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const rounds = parseInt(tab.dataset.rounds);
+        const nick = $('nickname').value.trim() || null;
+        renderLeaderboard(nick, rounds);
+    });
+});
