@@ -683,47 +683,87 @@ $('btnShare')?.addEventListener('click', () => {
 const SUPABASE_URL = 'https://nftichzrxjkgqporlivb.supabase.co/';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mdGljaHpyeGprZ3Fwb3JsaXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2OTY4NjgsImV4cCI6MjA5MDI3Mjg2OH0.rRUa-58ZEro9yus16R1nJTMSZVsoZlg-wHZL1QoGxrM';                 
 
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let currentLbRounds = 5; // активная вкладка
+let db = null;
+let currentLbRounds = 5;
+
+// Пробуем подключиться
+try {
+    if (window.supabase) {
+        db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('Supabase подключён ✅');
+    } else {
+        console.warn('Supabase не загружен, используем localStorage');
+    }
+} catch (err) {
+    console.warn('Ошибка подключения Supabase:', err);
+}
 
 // Сохранить результат
 async function saveScore(nickname, score, rounds) {
+    // Сохраняем локально всегда
+    saveScoreLocal(nickname, score, rounds);
+
+    // Пробуем отправить в Supabase
+    if (!db) return;
     try {
-        await db.from('leaderboard').insert({
-            nickname: nickname,
-            score: score,
-            rounds: rounds,
+        const { error } = await db.from('leaderboard').insert({
+            nickname, score, rounds,
             max_score: rounds * 5000
         });
+        if (error) throw error;
+        console.log('Результат сохранён в Supabase ✅');
     } catch (err) {
-        console.error('Ошибка сохранения:', err);
+        console.warn('Не удалось сохранить в Supabase:', err);
     }
 }
 
-// Загрузить таблицу по кол-ву раундов
+// Загрузить таблицу
 async function loadLeaderboard(rounds) {
-    try {
-        const { data, error } = await db
-            .from('leaderboard')
-            .select('*')
-            .eq('rounds', rounds)
-            .order('score', { ascending: false })
-            .limit(50);
+    // Пробуем Supabase
+    if (db) {
+        try {
+            const { data, error } = await db
+                .from('leaderboard')
+                .select('*')
+                .eq('rounds', rounds)
+                .order('score', { ascending: false })
+                .limit(50);
 
-        if (error) throw error;
-        return data || [];
-    } catch (err) {
-        console.error('Ошибка загрузки:', err);
-        return [];
+            if (error) throw error;
+            if (data && data.length > 0) return data;
+        } catch (err) {
+            console.warn('Supabase недоступен, загружаем локально:', err);
+        }
     }
+
+    // Fallback — localStorage
+    return loadLeaderboardLocal(rounds);
+}
+
+// === localStorage fallback ===
+function saveScoreLocal(nickname, score, rounds) {
+    const key = 'mtaLb_' + rounds;
+    const entries = loadLeaderboardLocal(rounds);
+    entries.push({
+        nickname, score, rounds,
+        max_score: rounds * 5000,
+        created_at: new Date().toISOString()
+    });
+    entries.sort((a, b) => b.score - a.score);
+    localStorage.setItem(key, JSON.stringify(entries.slice(0, 50)));
+}
+
+function loadLeaderboardLocal(rounds) {
+    try {
+        return JSON.parse(localStorage.getItem('mtaLb_' + rounds) || '[]');
+    } catch { return []; }
 }
 
 // Отрисовать таблицу
 async function renderLeaderboard(highlightNickname, rounds) {
     if (rounds !== undefined) currentLbRounds = rounds;
 
-    // Обновляем активную вкладку
     document.querySelectorAll('.lb-tab').forEach(t => {
         t.classList.toggle('active', parseInt(t.dataset.rounds) === currentLbRounds);
     });
@@ -731,7 +771,6 @@ async function renderLeaderboard(highlightNickname, rounds) {
     const list = $('leaderboardList');
     list.innerHTML = '<div class="leaderboard__empty">Загрузка...</div>';
 
-    // Сброс подиума
     for (let i = 1; i <= 3; i++) {
         const p = $('podium' + i);
         p.querySelector('.podium__name').textContent = '—';
@@ -741,10 +780,9 @@ async function renderLeaderboard(highlightNickname, rounds) {
 
     const entries = await loadLeaderboard(currentLbRounds);
 
-    // Подиум (топ-3)
+    // Подиум
     for (let i = 0; i < Math.min(3, entries.length); i++) {
         const p = $('podium' + (i + 1));
-        const pct = Math.round((entries[i].score / entries[i].max_score) * 100);
         p.querySelector('.podium__name').textContent = entries[i].nickname;
         p.querySelector('.podium__score').textContent = entries[i].score.toLocaleString();
         p.style.opacity = '1';
@@ -787,7 +825,7 @@ function getMedal(i) {
     return i + 1;
 }
 
-// Сохраняем результат
+// Сохраняем после игры
 const _originalShowFinal = showFinalResults;
 showFinalResults = function () {
     _originalShowFinal();
@@ -809,7 +847,7 @@ $('btnFinalLb')?.addEventListener('click', () => {
 
 $('btnLbBack')?.addEventListener('click', () => showScreen('screenMenu'));
 
-// Вкладки лидерборда
+// Вкладки
 document.querySelectorAll('.lb-tab').forEach(tab => {
     tab.addEventListener('click', () => {
         const rounds = parseInt(tab.dataset.rounds);
