@@ -27,6 +27,7 @@ let mapStartPanX = 0, mapStartPanY = 0;
 let markerPlaced = false;
 let markerMapX = 0, markerMapY = 0;
 let lastMapMouseX = null, lastMapMouseY = null;
+let allPoints = [];
 
 const $ = id => document.getElementById(id);
 
@@ -639,7 +640,12 @@ document.querySelectorAll('.setting__options').forEach(g => {
     });
 });
 
-$('btnStart').addEventListener('click', startGame);
+$('btnStart').addEventListener('click', async () => {
+    if (!allPoints.length) {
+        await loadPointsFromSupabase();
+    }
+    startGame();
+});
 $('btnPlayAgain').addEventListener('click', () => showScreen('screenMenu'));
 $('btnNextRound').addEventListener('click', nextRound);
 $('btnGuess').addEventListener('click', makeGuess);
@@ -680,10 +686,6 @@ $('btnShare')?.addEventListener('click', () => {
 
 // ===== SUPABASE =====
 // ВСТАВЬ СВОИ КЛЮЧИ:
-const SUPABASE_URL = 'https://nftichzrxjkgqporlivb.supabase.co/';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mdGljaHpyeGprZ3Fwb3JsaXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2OTY4NjgsImV4cCI6MjA5MDI3Mjg2OH0.rRUa-58ZEro9yus16R1nJTMSZVsoZlg-wHZL1QoGxrM';                 
-
-
 let db = null;
 let currentLbRounds = 5;
 
@@ -883,3 +885,27 @@ document.querySelectorAll('.lb-tab').forEach(tab => {
         renderLeaderboard(nick, rounds);
     });
 });
+
+async function loadPointsFromSupabase() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('points')
+            .select('*')
+            .order('id', { ascending: true });
+
+        if (error) throw error;
+
+        allPoints = (data || []).map(item => ({
+            id: item.id,
+            x: item.x,
+            y: item.y,
+            name: item.name,
+            panorama: item.panorama_url
+        }));
+
+        console.log('Точки загружены из Supabase:', allPoints.length);
+    } catch (err) {
+        console.error('Ошибка загрузки points:', err);
+        alert('Не удалось загрузить точки из базы');
+    }
+}
