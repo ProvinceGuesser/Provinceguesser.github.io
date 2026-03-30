@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Отправить панораму</title>
+  <link rel="stylesheet" href="submit.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel">
+      <h1>Отправить панораму</h1>
+
+      <label class="field">
+        <span>Ник</span>
+        <input id="nickname" type="text" placeholder="Ваш ник" />
+      </label>
+
+      <label class="field">
+        <span>Название места</span>
+        <input id="placeName" type="text" placeholder="Например: Перекресток у банка" />
+      </label>
+
+      <label class="field">
+        <span>Панорама</span>
+        <input id="panoramaFile" type="file" accept="image/*" />
+      </label>
+
+      <div class="coords-box">
+        <div><strong>X:</strong> <span id="coordX">—</span></div>
+        <div><strong>Y:</strong> <span id="coordY">—</span></div>
+      </div>
+
+      <div class="btns">
+        <button id="btnSubmit" type="button">Отправить</button>
+        <button id="btnReset" class="ghost" type="button">Сбросить</button>
+      </div>
+
+      <div id="statusBox" class="status-box">Выберите файл и точку на карте</div>
+
+      <a href="index.html" class="corner-nav-btn">← Назад к игре</a>
+    </aside>
+
+    <main class="workspace">
+      <section class="viewer-block">
+        <div class="viewer-title">Панорама</div>
+        <div class="panorama" id="panorama">
+          <div class="panorama__viewport" id="panoramaViewport">
+            <img id="panoramaImg" class="panorama__img" alt="Панорама" draggable="false" />
+          </div>
+          <div class="placeholder" id="panoramaPlaceholder">Загрузите панораму</div>
+        </div>
+      </section>
+
+      <section class="viewer-block">
+        <div class="viewer-title">Карта</div>
+        <div class="map-toolbar">
+          <button id="mapZoomIn" type="button">+</button>
+          <button id="mapZoomOut" type="button">−</button>
+          <button id="mapReset" type="button">Сброс</button>
+        </div>
+        <div class="map" id="map">
+          <div class="map__inner" id="mapInner">
+            <img src="../map.jpg" id="mapImg" class="map__img" alt="Карта" draggable="false" />
+            <div class="map-marker hidden" id="mapMarker"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../supabase-config.js"></script>
+  <script src="submit.js"></script>
+</body>
+</html>
