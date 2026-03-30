@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Модерация панорам</title>
+  <link rel="stylesheet" href="moderation.css" />
+</head>
+<body>
+  <!-- ЛОГИН -->
+  <div class="login-wrap" id="loginWrap">
+    <div class="login-card">
+      <h1>Вход в модерацию</h1>
+
+      <label class="login-field">
+        <span>Логин</span>
+        <input id="loginUsername" type="text" />
+      </label>
+
+      <label class="login-field">
+        <span>Пароль</span>
+        <input id="loginPassword" type="password" />
+      </label>
+
+      <button id="btnLogin">Войти</button>
+      <div id="loginStatus" class="login-status"></div>
+    </div>
+  </div>
+
+  <!-- ОСНОВНАЯ СТРАНИЦА -->
+  <div class="page hidden" id="adminPage">
+    <div class="topbar">
+      <h1>Модерация панорам</h1>
+      <div class="topbar__actions">
+        <button id="btnExportApproved">Экспорт approved в points.js</button>
+        <button id="btnReload">Обновить</button>
+        <button id="btnLogout" class="reject">Выйти</button>
+      </div>
+    </div>
+    
+        <div class="mod-tabs">
+            <button class="mod-tab active" data-status="pending">Pending</button>
+            <button class="mod-tab" data-status="approved">Approved</button>
+            <button class="mod-tab" data-status="rejected">Rejected</button>
+        </div>
+
+        <!-- <div class="export-box hidden" id="exportBoxWrap">
+            <h2>Готовый points.js</h2>
+            <textarea id="exportBox" readonly></textarea>
+            <button id="btnCopyExport">Копировать points.js</button>
+        </div> -->
+
+<div id="list" class="list"></div>
+    <div class="export-box hidden" id="exportBoxWrap">
+      <h2>Готовый points.js</h2>
+      <textarea id="exportBox" readonly></textarea>
+      <button id="btnCopyExport">Копировать points.js</button>
+    </div>
+
+    <div id="list" class="list"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="supabase-config.js"></script>
+  <script src="moderation.js"></script>
+</body>
+</html>

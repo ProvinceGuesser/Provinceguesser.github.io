@@ -689,14 +689,15 @@ let currentLbRounds = 5;
 
 // Пробуем подключиться
 try {
-    if (window.supabase) {
+    if (window.supabase && window.supabase.createClient) {
         db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         console.log('Supabase подключён ✅');
     } else {
-        console.warn('Supabase не загружен, используем localStorage');
+        console.warn('Supabase не загружен');
     }
 } catch (err) {
-    console.warn('Ошибка подключения Supabase:', err);
+    console.warn('Ошибка Supabase:', err);
+    db = null;
 }
 
 // Сохранить результат
@@ -834,19 +835,46 @@ showFinalResults = function () {
 };
 
 // Кнопки
-$('btnLeaderboard')?.addEventListener('click', () => {
-    renderLeaderboard(null, totalRounds || 5);
-    showScreen('screenLeaderboard');
+// ===== ОБРАБОТЧИКИ ЛИДЕРБОРДА =====
+// Оборачиваем в DOMContentLoaded на случай если скрипт загрузился раньше DOM
+document.addEventListener('DOMContentLoaded', function () {
+    const btnLb = document.getElementById('btnLeaderboard');
+    const btnFinalLb = document.getElementById('btnFinalLb');
+    const btnLbBack = document.getElementById('btnLbBack');
+
+    if (btnLb) {
+        btnLb.addEventListener('click', function () {
+            console.log('Открываю лидерборд');
+            renderLeaderboard(null, totalRounds || 5);
+            showScreen('screenLeaderboard');
+        });
+    }
+
+    if (btnFinalLb) {
+        btnFinalLb.addEventListener('click', function () {
+            const nick = document.getElementById('nickname').value.trim() || 'Игрок';
+            renderLeaderboard(nick, totalRounds);
+            showScreen('screenLeaderboard');
+        });
+    }
+
+    if (btnLbBack) {
+        btnLbBack.addEventListener('click', function () {
+            showScreen('screenMenu');
+        });
+    }
+
+    // Вкладки
+    document.querySelectorAll('.lb-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            const rounds = parseInt(tab.dataset.rounds);
+            const nick = document.getElementById('nickname').value.trim() || null;
+            renderLeaderboard(nick, rounds);
+        });
+    });
+
+    console.log('Обработчики лидерборда привязаны ✅');
 });
-
-$('btnFinalLb')?.addEventListener('click', () => {
-    const nick = $('nickname').value.trim() || 'Игрок';
-    renderLeaderboard(nick, totalRounds);
-    showScreen('screenLeaderboard');
-});
-
-$('btnLbBack')?.addEventListener('click', () => showScreen('screenMenu'));
-
 // Вкладки
 document.querySelectorAll('.lb-tab').forEach(tab => {
     tab.addEventListener('click', () => {
