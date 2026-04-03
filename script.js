@@ -1,4 +1,9 @@
+const $ = id => document.getElementById(id);
+
 // ===== СОСТОЯНИЕ =====
+let allPoints = [];
+let currentLinks = [];
+
 let currentRound = 1;
 let totalRounds = 5;
 let totalScore = 0;
@@ -27,51 +32,190 @@ let mapStartPanX = 0, mapStartPanY = 0;
 let markerPlaced = false;
 let markerMapX = 0, markerMapY = 0;
 let lastMapMouseX = null, lastMapMouseY = null;
-let allPoints = [];
 
-const $ = id => document.getElementById(id);
+// Лидерборд
+let db = null;
+let currentLbRounds = 5;
+
+// ===== SUPABASE =====
+try {
+    if (typeof supabaseClient !== 'undefined') {
+        db = supabaseClient;
+        console.log('Supabase подключён ✅');
+    } else {
+        console.warn('Supabase не подключён');
+    }
+} catch (err) {
+    console.warn('Ошибка Supabase:', err);
+    db = null;
+}
 
 // ===== ЭКРАНЫ =====
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    $(id).classList.add('active');
+    const el = $(id);
+    if (el) el.classList.add('active');
 }
 
 // ===== HUD =====
 function updateHUD() {
-    $('hudRound').textContent = currentRound;
-    $('hudTotalRounds').textContent = totalRounds;
-    $('hudScore').textContent = totalScore.toLocaleString();
+    if ($('hudRound')) $('hudRound').textContent = currentRound;
+    if ($('hudTotalRounds')) $('hudTotalRounds').textContent = totalRounds;
+    if ($('hudScore')) $('hudScore').textContent = totalScore.toLocaleString();
+}
+
+// ===== ЗАГРУЗКА ТОЧЕК ИЗ SUPABASE =====
+async function loadPointsFromSupabase() {
+    if (!db) {
+        console.error('Supabase client не найден');
+        return;
+    }
+
+    try {
+        const { data, error } = await db
+            .from('points')
+            .select('*')
+            .order('id', { ascending: true });
+
+        if (error) throw error;
+
+        allPoints = (data || []).map(item => ({
+            id: item.id,
+            x: item.x,
+            y: item.y,
+            name: item.name,
+            panorama: item.panorama_url
+        }));
+
+        console.log('Точки загружены из Supabase:', allPoints.length);
+    } catch (err) {
+        console.error('Ошибка загрузки points:', err);
+        alert('Не удалось загрузить точки из базы');
+        allPoints = [];
+    }
+}
+
+// ===== ЗАГРУЗКА LINKS =====
+async function loadLinksForCurrentPoint() {
+    if (!db || !currentPoint) {
+        currentLinks = [];
+        renderPanoramaLinks();
+        return;
+    }
+
+    try {
+        const { data, error } = await db
+            .from('point_links')
+            .select('*')
+            .eq('from_point_id', currentPoint.id)
+            .order('id', { ascending: true });
+
+        if (error) throw error;
+
+        currentLinks = data || [];
+        renderPanoramaLinks();
+    } catch (err) {
+        console.error('Ошибка загрузки links:', err);
+        currentLinks = [];
+        renderPanoramaLinks();
+    }
+}
+
+// ===== ПЕРЕХОДЫ НА ПАНОРАМЕ =====
+function renderPanoramaLinks() {
+    const layer = $('panoramaLinksLayer');
+    if (!layer) return;
+
+    layer.innerHTML = '';
+
+    if (!currentLinks || !currentLinks.length || !panoReady || !panoImageWidth) {
+        return;
+    }
+
+    const container = $('panorama');
+    const viewW = container.clientWidth;
+    const viewH = container.clientHeight;
+
+    currentLinks.forEach(link => {
+        const targetPoint = allPoints.find(p => p.id === link.to_point_id);
+        const label = link.label || (targetPoint ? targetPoint.name : 'Переход');
+
+        const worldX = (link.pano_x / 100) * panoImageWidth;
+        let screenX = worldX + panoX;
+
+        while (screenX < 0) screenX += panoImageWidth;
+        while (screenX > panoImageWidth) screenX -= panoImageWidth;
+
+        const candidates = [screenX, screenX - panoImageWidth, screenX + panoImageWidth];
+
+        candidates.forEach(cx => {
+            if (cx >= -80 && cx <= viewW + 80) {
+                const el = document.createElement('div');
+                el.className = 'panorama-link';
+                el.style.left = `${cx}px`;
+                el.style.top = `${(link.pano_y / 100) * viewH}px`;
+
+                el.innerHTML = `
+                    <div class="panorama-link__arrow"></div>
+                    <div class="panorama-link__label">${label}</div>
+                `;
+
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    goToLinkedPoint(link.to_point_id);
+                });
+
+                layer.appendChild(el);
+            }
+        });
+    });
+}
+
+async function goToLinkedPoint(targetId) {
+    const nextPoint = allPoints.find(p => p.id === targetId);
+
+    if (!nextPoint) {
+        alert('Точка перехода не найдена');
+        return;
+    }
+
+    currentPoint = nextPoint;
+
+    const img = $('panoramaImg');
+    if (img) img.style.opacity = '0';
+
+    setTimeout(async () => {
+        loadPanorama(currentPoint.panorama);
+        await loadLinksForCurrentPoint();
+    }, 180);
 }
 
 // ===== ПАНОРАМА =====
-
 function loadPanorama(imageUrl) {
     const viewport = $('panoramaViewport');
     const img = $('panoramaImg');
 
-    // Сброс
+    if (!viewport || !img) return;
+
     panoX = 0;
     panoZoom = 1;
     panoVelocity = 0;
     panoReady = false;
+
     if (panoAnimFrame) {
         cancelAnimationFrame(panoAnimFrame);
         panoAnimFrame = null;
     }
 
-    // Убираем старый клон
     const oldClone = viewport.querySelector('.panorama__img--clone');
     if (oldClone) oldClone.remove();
 
-    // Загружаем новое изображение
     img.onload = function () {
         setupPanorama();
     };
 
     img.src = imageUrl;
 
-    // Если уже в кеше
     if (img.complete && img.naturalWidth > 0) {
         setupPanorama();
     }
@@ -82,17 +226,16 @@ function setupPanorama() {
     const img = $('panoramaImg');
     const container = $('panorama');
 
-    if (!img.naturalWidth) return;
+    if (!viewport || !img || !container || !img.naturalWidth) return;
 
-    // Считаем размеры
     const containerH = container.clientHeight;
     const scale = containerH / img.naturalHeight;
     panoImageWidth = img.naturalWidth * scale;
 
     img.style.height = containerH + 'px';
     img.style.width = panoImageWidth + 'px';
+    img.style.opacity = '1';
 
-    // Создаём клон для бесшовной прокрутки
     let clone = viewport.querySelector('.panorama__img--clone');
     if (!clone) {
         clone = document.createElement('img');
@@ -100,32 +243,29 @@ function setupPanorama() {
         clone.draggable = false;
         viewport.appendChild(clone);
     }
+
     clone.src = img.src;
     clone.style.height = containerH + 'px';
     clone.style.width = panoImageWidth + 'px';
 
-    // Случайная начальная позиция
     panoX = -(Math.random() * panoImageWidth);
-
     panoReady = true;
     applyPanorama();
 }
 
 function applyPanorama() {
-    if (!panoReady) return;
+    if (!panoReady || !panoImageWidth) return;
 
     const viewport = $('panoramaViewport');
+    if (!viewport) return;
 
-    // Зацикливание
-    if (panoImageWidth > 0) {
-        while (panoX > 0) panoX -= panoImageWidth;
-        while (panoX < -panoImageWidth) panoX += panoImageWidth;
-    }
+    while (panoX > 0) panoX -= panoImageWidth;
+    while (panoX < -panoImageWidth) panoX += panoImageWidth;
 
     viewport.style.transform = `translateX(${panoX}px)`;
+    renderPanoramaLinks();
 }
 
-// Инерция — плавная
 function panoInertiaLoop() {
     if (Math.abs(panoVelocity) < 0.3) {
         panoVelocity = 0;
@@ -134,7 +274,7 @@ function panoInertiaLoop() {
     }
 
     panoX += panoVelocity;
-    panoVelocity *= 0.92; // трение
+    panoVelocity *= 0.92;
     applyPanorama();
     panoAnimFrame = requestAnimationFrame(panoInertiaLoop);
 }
@@ -147,22 +287,61 @@ function stopPanoInertia() {
     panoVelocity = 0;
 }
 
-// ===== ПАНОРАМА — МЫШЬ =====
+const panoEl = $('panorama');
+if (panoEl) {
+    panoEl.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.hud') ||
+            e.target.closest('.btn-open-map') ||
+            e.target.closest('.map-panel') ||
+            e.target.closest('.panorama-link')) return;
 
-$('panorama').addEventListener('mousedown', (e) => {
-    // Не перехватываем клики по UI элементам
-    if (e.target.closest('.hud') ||
-        e.target.closest('.btn-open-map') ||
-        e.target.closest('.map-panel')) return;
+        panoDragging = true;
+        panoDragStartX = e.clientX;
+        panoDragStartPanoX = panoX;
+        panoLastMouseX = e.clientX;
+        panoLastMoveTime = Date.now();
+        stopPanoInertia();
+        e.preventDefault();
+    });
 
-    panoDragging = true;
-    panoDragStartX = e.clientX;
-    panoDragStartPanoX = panoX;
-    panoLastMouseX = e.clientX;
-    panoLastMoveTime = Date.now();
-    stopPanoInertia();
-    e.preventDefault();
-});
+    panoEl.addEventListener('wheel', (e) => {
+        if (e.target.closest('.map-panel')) return;
+        e.preventDefault();
+
+        const container = $('panorama');
+        const img = $('panoramaImg');
+        if (!img || !img.naturalWidth) return;
+
+        const containerH = container.clientHeight;
+        const delta = e.deltaY > 0 ? -0.15 : 0.15;
+        const newZoom = Math.max(1, Math.min(3, panoZoom + delta));
+
+        if (newZoom === panoZoom) return;
+
+        const oldWidth = panoImageWidth;
+        panoZoom = newZoom;
+
+        const scale = (containerH * panoZoom) / img.naturalHeight;
+        panoImageWidth = img.naturalWidth * scale;
+        const h = containerH * panoZoom;
+
+        img.style.height = h + 'px';
+        img.style.width = panoImageWidth + 'px';
+
+        const clone = $('panoramaViewport')?.querySelector('.panorama__img--clone');
+        if (clone) {
+            clone.style.height = h + 'px';
+            clone.style.width = panoImageWidth + 'px';
+        }
+
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const ratio = panoImageWidth / oldWidth;
+        panoX = mouseX - (mouseX - panoX) * ratio;
+
+        applyPanorama();
+    }, { passive: false });
+}
 
 document.addEventListener('mousemove', (e) => {
     if (!panoDragging) return;
@@ -170,18 +349,15 @@ document.addEventListener('mousemove', (e) => {
     const now = Date.now();
     const dt = now - panoLastMoveTime;
 
-    // Скорость для инерции (пиксели в кадр, ~16ms)
     if (dt > 0) {
         const dx = e.clientX - panoLastMouseX;
-        panoVelocity = dx * (16 / Math.max(dt, 1)); // нормализуем к 60fps
-        // Ограничиваем максимальную скорость
+        panoVelocity = dx * (16 / Math.max(dt, 1));
         panoVelocity = Math.max(-30, Math.min(30, panoVelocity));
     }
 
     panoLastMouseX = e.clientX;
     panoLastMoveTime = now;
 
-    // Двигаем панораму
     panoX = panoDragStartPanoX + (e.clientX - panoDragStartX);
     applyPanorama();
 });
@@ -190,104 +366,11 @@ document.addEventListener('mouseup', () => {
     if (!panoDragging) return;
     panoDragging = false;
 
-    // Запускаем инерцию только если есть скорость
     if (Math.abs(panoVelocity) > 1) {
         panoAnimFrame = requestAnimationFrame(panoInertiaLoop);
     }
 });
 
-// Зум панорамы колёсиком
-$('panorama').addEventListener('wheel', (e) => {
-    if (e.target.closest('.map-panel')) return;
-    e.preventDefault();
-
-    const container = $('panorama');
-    const img = $('panoramaImg');
-    if (!img.naturalWidth) return;
-
-    const containerH = container.clientHeight;
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    const newZoom = Math.max(1, Math.min(3, panoZoom + delta));
-
-    if (newZoom === panoZoom) return;
-
-    const oldWidth = panoImageWidth;
-    panoZoom = newZoom;
-
-    const scale = (containerH * panoZoom) / img.naturalHeight;
-    panoImageWidth = img.naturalWidth * scale;
-    const h = containerH * panoZoom;
-
-    // Обновляем оригинал и клон
-    img.style.height = h + 'px';
-    img.style.width = panoImageWidth + 'px';
-
-    const clone = $('panoramaViewport').querySelector('.panorama__img--clone');
-    if (clone) {
-        clone.style.height = h + 'px';
-        clone.style.width = panoImageWidth + 'px';
-    }
-
-    // Zoom to cursor — сохраняем точку под курсором
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const ratio = panoImageWidth / oldWidth;
-    panoX = mouseX - (mouseX - panoX) * ratio;
-
-    // Вертикальное центрирование
-    const offsetY = (containerH - h) / 2;
-    $('panoramaViewport').style.top = offsetY + 'px';
-
-    applyPanorama();
-}, { passive: false });
-
-// ===== ПАНОРАМА — ТАЧСКРИН =====
-
-let touchStartX = 0;
-let touchStartPanoX = 0;
-let touchLastX = 0;
-let touchLastTime = 0;
-
-$('panorama').addEventListener('touchstart', (e) => {
-    if (e.target.closest('.hud') ||
-        e.target.closest('.btn-open-map') ||
-        e.target.closest('.map-panel')) return;
-
-    panoDragging = true;
-    touchStartX = e.touches[0].clientX;
-    touchStartPanoX = panoX;
-    touchLastX = touchStartX;
-    touchLastTime = Date.now();
-    stopPanoInertia();
-}, { passive: true });
-
-$('panorama').addEventListener('touchmove', (e) => {
-    if (!panoDragging) return;
-
-    const now = Date.now();
-    const dt = now - touchLastTime;
-    const currentX = e.touches[0].clientX;
-
-    if (dt > 0) {
-        panoVelocity = (currentX - touchLastX) * (16 / Math.max(dt, 1));
-        panoVelocity = Math.max(-30, Math.min(30, panoVelocity));
-    }
-
-    touchLastX = currentX;
-    touchLastTime = now;
-
-    panoX = touchStartPanoX + (currentX - touchStartX);
-    applyPanorama();
-}, { passive: true });
-
-$('panorama').addEventListener('touchend', () => {
-    panoDragging = false;
-    if (Math.abs(panoVelocity) > 1) {
-        panoAnimFrame = requestAnimationFrame(panoInertiaLoop);
-    }
-});
-
-// Ресайз
 window.addEventListener('resize', () => {
     if (panoReady) setupPanorama();
 });
@@ -296,7 +379,7 @@ window.addEventListener('resize', () => {
 function preloadNextRound() {
     if (currentRound >= totalRounds) return;
     const next = roundPoints[currentRound];
-    if (next) {
+    if (next && next.panorama) {
         const img = new Image();
         img.src = next.panorama;
     }
@@ -304,6 +387,10 @@ function preloadNextRound() {
 
 // ===== СЛУЧАЙНЫЕ ТОЧКИ =====
 function pickRandomPoints(count) {
+    if (!Array.isArray(allPoints) || allPoints.length === 0) {
+        return [];
+    }
+
     const shuffled = [...allPoints].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, Math.min(count, shuffled.length));
 }
@@ -312,6 +399,8 @@ function pickRandomPoints(count) {
 function initMap() {
     const body = $('mapBody');
     const container = $('mapContainer');
+    if (!body || !container) return;
+
     const rect = body.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height);
 
@@ -325,13 +414,16 @@ function initMap() {
 }
 
 function applyMapTransform() {
-    $('mapContainer').style.transform = `translate(${mapPanX}px, ${mapPanY}px) scale(${mapZoom})`;
+    const container = $('mapContainer');
+    if (!container) return;
+    container.style.transform = `translate(${mapPanX}px, ${mapPanY}px) scale(${mapZoom})`;
 }
 
 function zoomMap(delta, clientX, clientY) {
     const body = $('mapBody');
-    const rect = body.getBoundingClientRect();
+    if (!body) return;
 
+    const rect = body.getBoundingClientRect();
     const oldZoom = mapZoom;
     const newZoom = Math.max(0.5, Math.min(10, mapZoom + delta));
     if (newZoom === oldZoom) return;
@@ -349,26 +441,42 @@ function zoomMap(delta, clientX, clientY) {
 
 function fitMap() {
     const body = $('mapBody');
+    const container = $('mapContainer');
+    if (!body || !container) return;
+
     const rect = body.getBoundingClientRect();
-    const size = parseFloat($('mapContainer').style.width);
+    const size = parseFloat(container.style.width);
     mapZoom = 1;
     mapPanX = (rect.width - size) / 2;
     mapPanY = (rect.height - size) / 2;
     applyMapTransform();
 }
 
-// Перетаскивание карты — ПКМ
-$('mapBody').addEventListener('mousedown', (e) => {
-    if (e.button === 2 || e.ctrlKey || e.shiftKey) {
-        isMapDragging = true;
-        mapDragStartX = e.clientX;
-        mapDragStartY = e.clientY;
-        mapStartPanX = mapPanX;
-        mapStartPanY = mapPanY;
+const mapBody = $('mapBody');
+if (mapBody) {
+    mapBody.addEventListener('mousedown', (e) => {
+        if (e.button === 2 || e.ctrlKey || e.shiftKey) {
+            isMapDragging = true;
+            mapDragStartX = e.clientX;
+            mapDragStartY = e.clientY;
+            mapStartPanX = mapPanX;
+            mapStartPanY = mapPanY;
+            e.preventDefault();
+        }
+    });
+
+    mapBody.addEventListener('contextmenu', e => e.preventDefault());
+
+    mapBody.addEventListener('mousemove', (e) => {
+        lastMapMouseX = e.clientX;
+        lastMapMouseY = e.clientY;
+    });
+
+    mapBody.addEventListener('wheel', (e) => {
         e.preventDefault();
-    }
-});
-$('mapBody').addEventListener('contextmenu', e => e.preventDefault());
+        zoomMap(e.deltaY > 0 ? -0.3 : 0.3, e.clientX, e.clientY);
+    }, { passive: false });
+}
 
 document.addEventListener('mousemove', (e) => {
     if (!isMapDragging) return;
@@ -376,67 +484,65 @@ document.addEventListener('mousemove', (e) => {
     mapPanY = mapStartPanY + (e.clientY - mapDragStartY);
     applyMapTransform();
 });
-document.addEventListener('mouseup', () => { isMapDragging = false; });
 
-$('mapBody').addEventListener('mousemove', (e) => {
-    lastMapMouseX = e.clientX;
-    lastMapMouseY = e.clientY;
+document.addEventListener('mouseup', () => {
+    isMapDragging = false;
 });
 
-$('mapBody').addEventListener('wheel', (e) => {
-    e.preventDefault();
-    zoomMap(e.deltaY > 0 ? -0.3 : 0.3, e.clientX, e.clientY);
-}, { passive: false });
+const mapContainer = $('mapContainer');
+if (mapContainer) {
+    mapContainer.addEventListener('click', (e) => {
+        if (isMapDragging) return;
 
-// Маркер
-$('mapContainer').addEventListener('click', (e) => {
-    if (isMapDragging) return;
-    const container = $('mapContainer');
-    const rect = container.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / mapZoom;
-    const y = (e.clientY - rect.top) / mapZoom;
-    const size = parseFloat(container.style.width);
+        const rect = mapContainer.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / mapZoom;
+        const y = (e.clientY - rect.top) / mapZoom;
+        const size = parseFloat(mapContainer.style.width);
 
-    const percX = (x / size) * 100;
-    const percY = (y / size) * 100;
-    if (percX < 0 || percX > 100 || percY < 0 || percY > 100) return;
+        const percX = (x / size) * 100;
+        const percY = (y / size) * 100;
+        if (percX < 0 || percX > 100 || percY < 0 || percY > 100) return;
 
-    const marker = $('mapMarker');
-    marker.style.left = percX + '%';
-    marker.style.top = percY + '%';
-    marker.classList.remove('hidden');
+        const marker = $('mapMarker');
+        if (marker) {
+            marker.style.left = percX + '%';
+            marker.style.top = percY + '%';
+            marker.classList.remove('hidden');
+        }
 
-    markerPlaced = true;
-    markerMapX = percX;
-    markerMapY = percY;
-    $('btnGuess').disabled = false;
+        markerPlaced = true;
+        markerMapX = percX;
+        markerMapY = percY;
+        if ($('btnGuess')) $('btnGuess').disabled = false;
 
-    const gameX = Math.round((percX / 100) * 6000 - 3000);
-    const gameY = Math.round(3000 - (percY / 100) * 6000);
-    $('mapCoords').textContent = `X: ${gameX}  Y: ${gameY}`;
-});
+        const gameX = Math.round((percX / 100) * 6000 - 3000);
+        const gameY = Math.round(3000 - (percY / 100) * 6000);
+        if ($('mapCoords')) $('mapCoords').textContent = `X: ${gameX}  Y: ${gameY}`;
+    });
+}
 
-$('btnMapZoomIn').addEventListener('click', () => zoomMap(0.4, lastMapMouseX, lastMapMouseY));
-$('btnMapZoomOut').addEventListener('click', () => zoomMap(-0.4, lastMapMouseX, lastMapMouseY));
-$('btnMapFit').addEventListener('click', fitMap);
+if ($('btnMapZoomIn')) $('btnMapZoomIn').addEventListener('click', () => zoomMap(0.4, lastMapMouseX, lastMapMouseY));
+if ($('btnMapZoomOut')) $('btnMapZoomOut').addEventListener('click', () => zoomMap(-0.4, lastMapMouseX, lastMapMouseY));
+if ($('btnMapFit')) $('btnMapFit').addEventListener('click', fitMap);
 
 // ===== ИГРОВАЯ ЛОГИКА =====
-
 function resetForNewRound() {
-    $('mapMarker').classList.add('hidden');
-    $('btnGuess').disabled = true;
-    $('mapCoords').textContent = 'X: — Y: —';
-    $('mapPanel').classList.remove('active');
+    if ($('mapMarker')) $('mapMarker').classList.add('hidden');
+    if ($('btnGuess')) $('btnGuess').disabled = true;
+    if ($('mapCoords')) $('mapCoords').textContent = 'X: — Y: —';
+    if ($('mapPanel')) $('mapPanel').classList.remove('active');
     markerPlaced = false;
     fitMap();
 }
 
 function startGame() {
-    const nickname = $('nickname').value.trim();
+    const nickname = $('nickname')?.value.trim();
     if (!nickname) {
-        $('nickname').focus();
-        $('nickname').style.borderColor = '#ff4444';
-        setTimeout(() => { $('nickname').style.borderColor = ''; }, 1500);
+        if ($('nickname')) {
+            $('nickname').focus();
+            $('nickname').style.borderColor = '#ff4444';
+            setTimeout(() => { $('nickname').style.borderColor = ''; }, 1500);
+        }
         return;
     }
 
@@ -447,6 +553,12 @@ function startGame() {
     currentRound = 1;
     totalScore = 0;
     roundPoints = pickRandomPoints(totalRounds);
+
+    if (!roundPoints || roundPoints.length === 0) {
+        alert('Нет доступных точек. Проверь загрузку из Supabase.');
+        return;
+    }
+
     currentPoint = roundPoints[0];
 
     updateHUD();
@@ -455,42 +567,35 @@ function startGame() {
 
     setTimeout(() => {
         loadPanorama(currentPoint.panorama);
+        loadLinksForCurrentPoint();
         initMap();
     }, 100);
 }
-// ===== ПОКАЗ РЕЗУЛЬТАТА НА КАРТЕ =====
+
 function showResultOnMap(guessX, guessY, actualX, actualY) {
     const zoomEl = $('resultMapZoom');
     const mapEl = $('resultMap');
 
-    // Игровые координаты → проценты
+    if (!zoomEl || !mapEl) return;
+
     const gx = ((guessX + 3000) / 6000) * 100;
     const gy = ((3000 - guessY) / 6000) * 100;
     const ax = ((actualX + 3000) / 6000) * 100;
     const ay = ((3000 - actualY) / 6000) * 100;
 
-    // Центр между точками
     const cx = (gx + ax) / 2;
     const cy = (gy + ay) / 2;
-
-    // Расстояние
     const span = Math.max(Math.abs(gx - ax), Math.abs(gy - ay));
 
-    // Зум — чтобы точки + отступ помещались
     const padding = 15;
     let zoom = Math.min(15, Math.max(1, 80 / Math.max(span + padding * 2, 5)));
     zoom = Math.round(zoom * 10) / 10;
 
-    // Размер зумленной карты в % от контейнера
     const zoomedSize = 100 * zoom;
-
-    // Позиция: сдвигаем так чтобы cx,cy были в центре видимой области
-    // cx% от карты должен быть на 50% контейнера
     let left = 50 - cx * zoom;
     let top = 50 - cy * zoom;
 
-    // Ограничиваем чтобы карта не выходила за края
-    const minLeft = 100 - zoomedSize;  // максимально влево
+    const minLeft = 100 - zoomedSize;
     const minTop = 100 - zoomedSize;
 
     left = Math.max(minLeft, Math.min(0, left));
@@ -498,28 +603,31 @@ function showResultOnMap(guessX, guessY, actualX, actualY) {
 
     const counterScale = 1 / zoom;
 
-    // Маркеры
     const pinG = $('resultPinGuess');
     const pinA = $('resultPinActual');
-
-    pinG.style.left = gx + '%';
-    pinG.style.top = gy + '%';
-    pinG.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
-
-    pinA.style.left = ax + '%';
-    pinA.style.top = ay + '%';
-    pinA.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
-
-    // Линия
     const line = $('resultLinePath');
-    line.setAttribute('x1', gx);
-    line.setAttribute('y1', gy);
-    line.setAttribute('x2', ax);
-    line.setAttribute('y2', ay);
-    line.setAttribute('stroke-width', 0.5 / zoom);
-    line.setAttribute('stroke-dasharray', `${1.5 / zoom},${1 / zoom}`);
 
-    // Сброс — показываем всю карту
+    if (pinG) {
+        pinG.style.left = gx + '%';
+        pinG.style.top = gy + '%';
+        pinG.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
+    }
+
+    if (pinA) {
+        pinA.style.left = ax + '%';
+        pinA.style.top = ay + '%';
+        pinA.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
+    }
+
+    if (line) {
+        line.setAttribute('x1', gx);
+        line.setAttribute('y1', gy);
+        line.setAttribute('x2', ax);
+        line.setAttribute('y2', ay);
+        line.setAttribute('stroke-width', 0.5 / zoom);
+        line.setAttribute('stroke-dasharray', `${1.5 / zoom},${1 / zoom}`);
+    }
+
     zoomEl.style.transition = 'none';
     zoomEl.style.width = '100%';
     zoomEl.style.height = '100%';
@@ -527,14 +635,14 @@ function showResultOnMap(guessX, guessY, actualX, actualY) {
     zoomEl.style.top = '0%';
     zoomEl.getBoundingClientRect();
 
-    // Анимации маркеров
-    pinG.style.animation = 'none';
-    pinA.style.animation = 'none';
-    pinG.getBoundingClientRect();
-    pinG.style.animation = '';
-    pinA.style.animation = '';
+    if (pinG && pinA) {
+        pinG.style.animation = 'none';
+        pinA.style.animation = 'none';
+        pinG.getBoundingClientRect();
+        pinG.style.animation = '';
+        pinA.style.animation = '';
+    }
 
-    // Зум с задержкой
     setTimeout(() => {
         zoomEl.style.transition = 'all 1s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
         zoomEl.style.width = zoomedSize + '%';
@@ -559,27 +667,34 @@ function makeGuess() {
     const roundScore = Math.round(5000 * Math.exp(-distance / 800));
     totalScore += roundScore;
 
-    $('resultDistance').textContent = distance.toLocaleString();
-    $('resultScore').textContent = roundScore.toLocaleString();
-    $('resultTotalScore').textContent = totalScore.toLocaleString();
-    $('resultLocation').textContent = currentPoint.name;
+    if ($('resultDistance')) $('resultDistance').textContent = distance.toLocaleString();
+    if ($('resultScore')) $('resultScore').textContent = roundScore.toLocaleString();
+    if ($('resultTotalScore')) $('resultTotalScore').textContent = totalScore.toLocaleString();
+    if ($('resultLocation')) $('resultLocation').textContent = currentPoint.name;
 
     if (roundScore >= 4000) {
-        $('resultEmoji').textContent = '🎯'; $('resultTitle').textContent = 'Отлично!';
+        if ($('resultEmoji')) $('resultEmoji').textContent = '🎯';
+        if ($('resultTitle')) $('resultTitle').textContent = 'Отлично!';
     } else if (roundScore >= 2000) {
-        $('resultEmoji').textContent = '👍'; $('resultTitle').textContent = 'Хорошо!';
+        if ($('resultEmoji')) $('resultEmoji').textContent = '👍';
+        if ($('resultTitle')) $('resultTitle').textContent = 'Хорошо!';
     } else if (roundScore >= 500) {
-        $('resultEmoji').textContent = '🤔'; $('resultTitle').textContent = 'Неплохо';
+        if ($('resultEmoji')) $('resultEmoji').textContent = '🤔';
+        if ($('resultTitle')) $('resultTitle').textContent = 'Неплохо';
     } else {
-        $('resultEmoji').textContent = '😅'; $('resultTitle').textContent = 'Далековато...';
+        if ($('resultEmoji')) $('resultEmoji').textContent = '😅';
+        if ($('resultTitle')) $('resultTitle').textContent = 'Далековато...';
     }
 
-    $('btnNextRound').textContent = currentRound >= totalRounds
-        ? '🏁 Посмотреть результаты' : 'Следующий раунд →';
+    if ($('btnNextRound')) {
+        $('btnNextRound').textContent = currentRound >= totalRounds
+            ? '🏁 Посмотреть результаты'
+            : 'Следующий раунд →';
+    }
 
     updateScoreDots();
     preloadNextRound();
-    $('mapPanel').classList.remove('active');
+    if ($('mapPanel')) $('mapPanel').classList.remove('active');
     showScreen('screenRoundResult');
 
     setTimeout(() => {
@@ -599,6 +714,7 @@ function nextRound() {
         showScreen('screenGame');
         setTimeout(() => {
             loadPanorama(currentPoint.panorama);
+            loadLinksForCurrentPoint();
             initMap();
         }, 100);
     }
@@ -606,6 +722,8 @@ function nextRound() {
 
 function updateScoreDots() {
     const c = $('scoreDots');
+    if (!c) return;
+
     c.innerHTML = '';
     for (let i = 0; i < totalRounds; i++) {
         const d = document.createElement('div');
@@ -617,113 +735,89 @@ function updateScoreDots() {
 function showFinalResults() {
     const max = totalRounds * 5000;
     const pct = Math.round((totalScore / max) * 100);
-    $('finalScore').textContent = totalScore.toLocaleString();
-    $('finalScoreMax').textContent = '/ ' + max.toLocaleString();
-    $('finalPercentage').textContent = pct + '%';
-    $('finalScoreFill').style.width = '0%';
-    setTimeout(() => { $('finalScoreFill').style.width = pct + '%'; }, 100);
 
-    if (pct >= 90)      { $('finalEmoji').textContent = '🏆'; $('finalRankText').textContent = 'Мастер Province!'; }
-    else if (pct >= 70)  { $('finalEmoji').textContent = '🥇'; $('finalRankText').textContent = 'Отлично знаешь карту!'; }
-    else if (pct >= 50)  { $('finalEmoji').textContent = '🥈'; $('finalRankText').textContent = 'Хорошо!'; }
-    else if (pct >= 30)  { $('finalEmoji').textContent = '🥉'; $('finalRankText').textContent = 'Неплохо'; }
-    else                 { $('finalEmoji').textContent = '🗺️'; $('finalRankText').textContent = 'Стоит поизучать карту!'; }
-}
+    if ($('finalScore')) $('finalScore').textContent = totalScore.toLocaleString();
+    if ($('finalScoreMax')) $('finalScoreMax').textContent = '/ ' + max.toLocaleString();
+    if ($('finalPercentage')) $('finalPercentage').textContent = pct + '%';
 
-// ===== ОБРАБОТЧИКИ =====
-document.querySelectorAll('.setting__options').forEach(g => {
-    g.querySelectorAll('.setting__btn').forEach(b => {
-        b.addEventListener('click', () => {
-            g.querySelectorAll('.setting__btn').forEach(x => x.classList.remove('active'));
-            b.classList.add('active');
-        });
-    });
-});
-
-$('btnStart').addEventListener('click', async () => {
-    if (!allPoints.length) {
-        await loadPointsFromSupabase();
+    if ($('finalScoreFill')) {
+        $('finalScoreFill').style.width = '0%';
+        setTimeout(() => { $('finalScoreFill').style.width = pct + '%'; }, 100);
     }
-    startGame();
-});
-$('btnPlayAgain').addEventListener('click', () => showScreen('screenMenu'));
-$('btnNextRound').addEventListener('click', nextRound);
-$('btnGuess').addEventListener('click', makeGuess);
 
-$('btnOpenMap').addEventListener('click', () => {
-    const p = $('mapPanel');
-    p.classList.toggle('active');
-    if (p.classList.contains('active')) setTimeout(initMap, 50);
-});
-$('btnCloseMap').addEventListener('click', () => $('mapPanel').classList.remove('active'));
-
-$('btnHowToPlay').addEventListener('click', () => $('modalHowTo').classList.add('active'));
-$('btnCloseHowTo').addEventListener('click', () => $('modalHowTo').classList.remove('active'));
-document.querySelector('.modal__backdrop').addEventListener('click', () => $('modalHowTo').classList.remove('active'));
-
-document.addEventListener('keydown', (e) => {
-    if (!$('screenGame').classList.contains('active')) return;
-    if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
-        const p = $('mapPanel');
-        p.classList.toggle('active');
-        if (p.classList.contains('active')) setTimeout(initMap, 50);
-    }
-});
-
-$('btnShare')?.addEventListener('click', () => {
-    const nick = $('nickname').value || 'Игрок';
-    const max = totalRounds * 5000;
-    const pct = Math.round((totalScore / max) * 100);
-    navigator.clipboard?.writeText(
-        `🗺️ MTA Province Guesser\nИгрок: ${nick}\nСчёт: ${totalScore.toLocaleString()}/${max.toLocaleString()} (${pct}%)`
-    );
-    const t = $('toast');
-    t.classList.remove('hidden');
-    setTimeout(() => t.classList.add('hidden'), 2500);
-});
-
-// ===== ТАБЛИЦА ЛИДЕРОВ =====
-
-// ===== SUPABASE =====
-// ВСТАВЬ СВОИ КЛЮЧИ:
-let db = null;
-let currentLbRounds = 5;
-
-// Пробуем подключиться
-try {
-    if (window.supabase && window.supabase.createClient) {
-        db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('Supabase подключён ✅');
+    if (pct >= 90) {
+        if ($('finalEmoji')) $('finalEmoji').textContent = '🏆';
+        if ($('finalRankText')) $('finalRankText').textContent = 'Мастер Province!';
+    } else if (pct >= 70) {
+        if ($('finalEmoji')) $('finalEmoji').textContent = '🥇';
+        if ($('finalRankText')) $('finalRankText').textContent = 'Отлично знаешь карту!';
+    } else if (pct >= 50) {
+        if ($('finalEmoji')) $('finalEmoji').textContent = '🥈';
+        if ($('finalRankText')) $('finalRankText').textContent = 'Хорошо!';
+    } else if (pct >= 30) {
+        if ($('finalEmoji')) $('finalEmoji').textContent = '🥉';
+        if ($('finalRankText')) $('finalRankText').textContent = 'Неплохо';
     } else {
-        console.warn('Supabase не загружен');
+        if ($('finalEmoji')) $('finalEmoji').textContent = '🗺️';
+        if ($('finalRankText')) $('finalRankText').textContent = 'Стоит поизучать карту!';
     }
-} catch (err) {
-    console.warn('Ошибка Supabase:', err);
-    db = null;
 }
 
-// Сохранить результат
+// ===== ЛИДЕРБОРД =====
 async function saveScore(nickname, score, rounds) {
-    // Сохраняем локально всегда
-    saveScoreLocal(nickname, score, rounds);
+    // localStorage fallback
+    saveScoreLocalBest(nickname, score, rounds);
 
-    // Пробуем отправить в Supabase
     if (!db) return;
+
     try {
-        const { error } = await db.from('leaderboard').insert({
-            nickname, score, rounds,
-            max_score: rounds * 5000
-        });
-        if (error) throw error;
-        console.log('Результат сохранён в Supabase ✅');
+        // Ищем существующую запись этого ника для этих раундов
+        const { data: existing, error: selectError } = await db
+            .from('leaderboard')
+            .select('*')
+            .eq('nickname', nickname)
+            .eq('rounds', rounds)
+            .limit(1);
+
+        if (selectError) throw selectError;
+
+        const maxScore = rounds * 5000;
+
+        if (!existing || existing.length === 0) {
+            // Нет записи — создаём
+            const { error: insertError } = await db
+                .from('leaderboard')
+                .insert({
+                    nickname,
+                    score,
+                    rounds,
+                    max_score: maxScore
+                });
+
+            if (insertError) throw insertError;
+        } else {
+            const old = existing[0];
+
+            // Обновляем только если новый результат лучше
+            if (score > old.score) {
+                const { error: updateError } = await db
+                    .from('leaderboard')
+                    .update({
+                        score,
+                        max_score: maxScore,
+                        created_at: new Date().toISOString()
+                    })
+                    .eq('id', old.id);
+
+                if (updateError) throw updateError;
+            }
+        }
     } catch (err) {
         console.warn('Не удалось сохранить в Supabase:', err);
     }
 }
 
-// Загрузить таблицу
 async function loadLeaderboard(rounds) {
-    // Пробуем Supabase
     if (db) {
         try {
             const { data, error } = await db
@@ -740,19 +834,33 @@ async function loadLeaderboard(rounds) {
         }
     }
 
-    // Fallback — localStorage
     return loadLeaderboardLocal(rounds);
 }
 
-// === localStorage fallback ===
-function saveScoreLocal(nickname, score, rounds) {
+function saveScoreLocalBest(nickname, score, rounds) {
     const key = 'mtaLb_' + rounds;
-    const entries = loadLeaderboardLocal(rounds);
-    entries.push({
-        nickname, score, rounds,
+    let entries = loadLeaderboardLocal(rounds);
+
+    const existingIndex = entries.findIndex(e =>
+        e.nickname.toLowerCase() === nickname.toLowerCase()
+    );
+
+    const newEntry = {
+        nickname,
+        score,
+        rounds,
         max_score: rounds * 5000,
         created_at: new Date().toISOString()
-    });
+    };
+
+    if (existingIndex === -1) {
+        entries.push(newEntry);
+    } else {
+        if (score > entries[existingIndex].score) {
+            entries[existingIndex] = newEntry;
+        }
+    }
+
     entries.sort((a, b) => b.score - a.score);
     localStorage.setItem(key, JSON.stringify(entries.slice(0, 50)));
 }
@@ -760,10 +868,11 @@ function saveScoreLocal(nickname, score, rounds) {
 function loadLeaderboardLocal(rounds) {
     try {
         return JSON.parse(localStorage.getItem('mtaLb_' + rounds) || '[]');
-    } catch { return []; }
+    } catch {
+        return [];
+    }
 }
 
-// Отрисовать таблицу
 async function renderLeaderboard(highlightNickname, rounds) {
     if (rounds !== undefined) currentLbRounds = rounds;
 
@@ -772,10 +881,13 @@ async function renderLeaderboard(highlightNickname, rounds) {
     });
 
     const list = $('leaderboardList');
+    if (!list) return;
+
     list.innerHTML = '<div class="leaderboard__empty">Загрузка...</div>';
 
     for (let i = 1; i <= 3; i++) {
         const p = $('podium' + i);
+        if (!p) continue;
         p.querySelector('.podium__name').textContent = '—';
         p.querySelector('.podium__score').textContent = '—';
         p.style.opacity = '0.3';
@@ -783,15 +895,14 @@ async function renderLeaderboard(highlightNickname, rounds) {
 
     const entries = await loadLeaderboard(currentLbRounds);
 
-    // Подиум
     for (let i = 0; i < Math.min(3, entries.length); i++) {
         const p = $('podium' + (i + 1));
+        if (!p) continue;
         p.querySelector('.podium__name').textContent = entries[i].nickname;
         p.querySelector('.podium__score').textContent = entries[i].score.toLocaleString();
         p.style.opacity = '1';
     }
 
-    // Список
     if (entries.length === 0) {
         list.innerHTML = `<div class="leaderboard__empty">
             Нет результатов для ${currentLbRounds} раундов.<br>Сыграй первым!
@@ -828,84 +939,106 @@ function getMedal(i) {
     return i + 1;
 }
 
-// Сохраняем после игры
 const _originalShowFinal = showFinalResults;
 showFinalResults = function () {
     _originalShowFinal();
-    const nickname = $('nickname').value.trim() || 'Игрок';
+    const nickname = $('nickname')?.value.trim() || 'Игрок';
     saveScore(nickname, totalScore, totalRounds);
 };
 
-// Кнопки
-// ===== ОБРАБОТЧИКИ ЛИДЕРБОРДА =====
-// Оборачиваем в DOMContentLoaded на случай если скрипт загрузился раньше DOM
-document.addEventListener('DOMContentLoaded', function () {
-    const btnLb = document.getElementById('btnLeaderboard');
-    const btnFinalLb = document.getElementById('btnFinalLb');
-    const btnLbBack = document.getElementById('btnLbBack');
-
-    if (btnLb) {
-        btnLb.addEventListener('click', function () {
-            console.log('Открываю лидерборд');
-            renderLeaderboard(null, totalRounds || 5);
-            showScreen('screenLeaderboard');
-        });
-    }
-
-    if (btnFinalLb) {
-        btnFinalLb.addEventListener('click', function () {
-            const nick = document.getElementById('nickname').value.trim() || 'Игрок';
-            renderLeaderboard(nick, totalRounds);
-            showScreen('screenLeaderboard');
-        });
-    }
-
-    if (btnLbBack) {
-        btnLbBack.addEventListener('click', function () {
-            showScreen('screenMenu');
-        });
-    }
-
-    // Вкладки
-    document.querySelectorAll('.lb-tab').forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            const rounds = parseInt(tab.dataset.rounds);
-            const nick = document.getElementById('nickname').value.trim() || null;
-            renderLeaderboard(nick, rounds);
+// ===== ОБРАБОТЧИКИ =====
+document.querySelectorAll('.setting__options').forEach(g => {
+    g.querySelectorAll('.setting__btn').forEach(b => {
+        b.addEventListener('click', () => {
+            g.querySelectorAll('.setting__btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
         });
     });
-
-    console.log('Обработчики лидерборда привязаны ✅');
 });
-// Вкладки
+
+if ($('btnStart')) {
+    $('btnStart').addEventListener('click', async () => {
+        if (!allPoints.length) {
+            await loadPointsFromSupabase();
+        }
+
+        if (!allPoints.length) {
+            alert('Не удалось загрузить точки из базы.');
+            return;
+        }
+
+        startGame();
+    });
+}
+
+if ($('btnPlayAgain')) $('btnPlayAgain').addEventListener('click', () => showScreen('screenMenu'));
+if ($('btnNextRound')) $('btnNextRound').addEventListener('click', nextRound);
+if ($('btnGuess')) $('btnGuess').addEventListener('click', makeGuess);
+
+if ($('btnOpenMap')) {
+    $('btnOpenMap').addEventListener('click', () => {
+        const p = $('mapPanel');
+        if (!p) return;
+        p.classList.toggle('active');
+        if (p.classList.contains('active')) setTimeout(initMap, 50);
+    });
+}
+
+if ($('btnCloseMap')) $('btnCloseMap').addEventListener('click', () => $('mapPanel')?.classList.remove('active'));
+
+if ($('btnHowToPlay')) $('btnHowToPlay').addEventListener('click', () => $('modalHowTo')?.classList.add('active'));
+if ($('btnCloseHowTo')) $('btnCloseHowTo').addEventListener('click', () => $('modalHowTo')?.classList.remove('active'));
+document.querySelector('.modal__backdrop')?.addEventListener('click', () => $('modalHowTo')?.classList.remove('active'));
+
+document.addEventListener('keydown', (e) => {
+    if (!$('screenGame')?.classList.contains('active')) return;
+    if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
+        const p = $('mapPanel');
+        if (!p) return;
+        p.classList.toggle('active');
+        if (p.classList.contains('active')) setTimeout(initMap, 50);
+    }
+});
+
+if ($('btnShare')) {
+    $('btnShare').addEventListener('click', () => {
+        const nick = $('nickname')?.value || 'Игрок';
+        const max = totalRounds * 5000;
+        const pct = Math.round((totalScore / max) * 100);
+        navigator.clipboard?.writeText(
+            `🗺️ MTA Province Guesser\nИгрок: ${nick}\nСчёт: ${totalScore.toLocaleString()}/${max.toLocaleString()} (${pct}%)`
+        );
+        const t = $('toast');
+        if (t) {
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 2500);
+        }
+    });
+}
+
+if ($('btnLeaderboard')) {
+    $('btnLeaderboard').addEventListener('click', () => {
+        renderLeaderboard(null, totalRounds || 5);
+        showScreen('screenLeaderboard');
+    });
+}
+
+if ($('btnFinalLb')) {
+    $('btnFinalLb').addEventListener('click', () => {
+        const nick = $('nickname')?.value.trim() || 'Игрок';
+        renderLeaderboard(nick, totalRounds);
+        showScreen('screenLeaderboard');
+    });
+}
+
+if ($('btnLbBack')) $('btnLbBack').addEventListener('click', () => showScreen('screenMenu'));
+
 document.querySelectorAll('.lb-tab').forEach(tab => {
     tab.addEventListener('click', () => {
         const rounds = parseInt(tab.dataset.rounds);
-        const nick = $('nickname').value.trim() || null;
+        const nick = $('nickname')?.value.trim() || null;
         renderLeaderboard(nick, rounds);
     });
 });
 
-async function loadPointsFromSupabase() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('points')
-            .select('*')
-            .order('id', { ascending: true });
-
-        if (error) throw error;
-
-        allPoints = (data || []).map(item => ({
-            id: item.id,
-            x: item.x,
-            y: item.y,
-            name: item.name,
-            panorama: item.panorama_url
-        }));
-
-        console.log('Точки загружены из Supabase:', allPoints.length);
-    } catch (err) {
-        console.error('Ошибка загрузки points:', err);
-        alert('Не удалось загрузить точки из базы');
-    }
-}
+console.log('Обработчики лидерборда привязаны ✅');

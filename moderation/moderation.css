@@ -430,3 +430,15 @@ button {
   opacity: 0;
   margin-top: -4px;
 }
+
+.topbar-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #2b2f52;
+  font-weight: 700;
+}

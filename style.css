@@ -709,3 +709,47 @@ html, body {
     transform: translateY(-2px);
     background: rgba(35, 35, 60, 0.95);
 }
+
+.panorama-links-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.panorama-link {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.15s ease;
+}
+
+.panorama-link:hover {
+    transform: translate(-50%, -50%) scale(1.08);
+}
+
+.panorama-link__arrow {
+    width: 22px;
+    height: 22px;
+    background: #1e90ff;
+    border: 2px solid #fff;
+    transform: rotate(45deg);
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+.panorama-link__label {
+    padding: 4px 8px;
+    background: rgba(15, 15, 25, 0.88);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 999px;
+    white-space: nowrap;
+}
