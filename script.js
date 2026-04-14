@@ -8,7 +8,8 @@ let currentRound = 1;
 let totalRounds = 5;
 let totalScore = 0;
 let roundPoints = [];
-let currentPoint = null;
+let roundTargetPoint = null;   // правильная точка раунда
+let currentViewPoint = null;   // текущая просматриваемая точка
 
 // Панорама
 let panoX = 0;
@@ -97,7 +98,7 @@ async function loadPointsFromSupabase() {
 
 // ===== ЗАГРУЗКА LINKS =====
 async function loadLinksForCurrentPoint() {
-    if (!db || !currentPoint) {
+    if (!db || !currentViewPoint) {
         currentLinks = [];
         renderPanoramaLinks();
         return;
@@ -107,17 +108,19 @@ async function loadLinksForCurrentPoint() {
         const { data, error } = await db
             .from('point_links')
             .select('*')
-            .eq('from_point_id', currentPoint.id)
+            .eq('from_point_id', currentViewPoint.id)
             .order('id', { ascending: true });
 
         if (error) throw error;
 
         currentLinks = data || [];
         renderPanoramaLinks();
+        updateReturnOriginButton();
     } catch (err) {
         console.error('Ошибка загрузки links:', err);
         currentLinks = [];
         renderPanoramaLinks();
+        updateReturnOriginButton();
     }
 }
 
@@ -179,13 +182,38 @@ async function goToLinkedPoint(targetId) {
         return;
     }
 
-    currentPoint = nextPoint;
+    currentViewPoint = nextPoint;
 
     const img = $('panoramaImg');
     if (img) img.style.opacity = '0';
 
     setTimeout(async () => {
-        loadPanorama(currentPoint.panorama);
+        loadPanorama(currentViewPoint.panorama);
+        await loadLinksForCurrentPoint();
+    }, 180);
+}
+
+function updateReturnOriginButton() {
+    const btn = $('btnReturnOrigin');
+    if (!btn) return;
+
+    if (!roundTargetPoint || !currentViewPoint || roundTargetPoint.id === currentViewPoint.id) {
+        btn.classList.add('hidden');
+    } else {
+        btn.classList.remove('hidden');
+    }
+}
+
+async function returnToOriginPoint() {
+    if (!roundTargetPoint) return;
+
+    currentViewPoint = roundTargetPoint;
+
+    const img = $('panoramaImg');
+    if (img) img.style.opacity = '0';
+
+    setTimeout(async () => {
+        loadPanorama(currentViewPoint.panorama);
         await loadLinksForCurrentPoint();
     }, 180);
 }
@@ -533,6 +561,7 @@ function resetForNewRound() {
     if ($('mapPanel')) $('mapPanel').classList.remove('active');
     markerPlaced = false;
     fitMap();
+    updateReturnOriginButton();
 }
 
 function startGame() {
@@ -559,16 +588,18 @@ function startGame() {
         return;
     }
 
-    currentPoint = roundPoints[0];
+    roundTargetPoint = roundPoints[0];
+    currentViewPoint = roundTargetPoint;
 
     updateHUD();
     resetForNewRound();
     showScreen('screenGame');
 
-    setTimeout(() => {
-        loadPanorama(currentPoint.panorama);
-        loadLinksForCurrentPoint();
-        initMap();
+    setTimeout(async () => {
+    loadPanorama(currentViewPoint.panorama);
+    await loadLinksForCurrentPoint();
+    initMap();
+    updateReturnOriginButton();
     }, 100);
 }
 
@@ -653,12 +684,12 @@ function showResultOnMap(guessX, guessY, actualX, actualY) {
 }
 
 function makeGuess() {
-    if (!currentPoint || !markerPlaced) return;
+    if (!roundTargetPoint || !markerPlaced) return;
 
     const guessX = Math.round((markerMapX / 100) * 6000 - 3000);
     const guessY = Math.round(3000 - (markerMapY / 100) * 6000);
-    const actualX = currentPoint.x;
-    const actualY = currentPoint.y;
+    const actualX = roundTargetPoint.x;
+    const actualY = roundTargetPoint.y;
 
     const distance = Math.round(Math.sqrt(
         Math.pow(guessX - actualX, 2) + Math.pow(guessY - actualY, 2)
@@ -670,7 +701,7 @@ function makeGuess() {
     if ($('resultDistance')) $('resultDistance').textContent = distance.toLocaleString();
     if ($('resultScore')) $('resultScore').textContent = roundScore.toLocaleString();
     if ($('resultTotalScore')) $('resultTotalScore').textContent = totalScore.toLocaleString();
-    if ($('resultLocation')) $('resultLocation').textContent = currentPoint.name;
+    if ($('resultLocation')) $('resultLocation').textContent = roundTargetPoint.name;
 
     if (roundScore >= 4000) {
         if ($('resultEmoji')) $('resultEmoji').textContent = '🎯';
@@ -708,14 +739,16 @@ function nextRound() {
         showScreen('screenFinal');
     } else {
         currentRound++;
-        currentPoint = roundPoints[currentRound - 1];
+        roundTargetPoint = roundPoints[currentRound - 1];
+        currentViewPoint = roundTargetPoint;
         updateHUD();
         resetForNewRound();
         showScreen('screenGame');
-        setTimeout(() => {
-            loadPanorama(currentPoint.panorama);
-            loadLinksForCurrentPoint();
+        setTimeout(async () => {
+            loadPanorama(currentViewPoint.panorama);
+            await loadLinksForCurrentPoint();
             initMap();
+            updateReturnOriginButton();
         }, 100);
     }
 }
@@ -1042,3 +1075,7 @@ document.querySelectorAll('.lb-tab').forEach(tab => {
 });
 
 console.log('Обработчики лидерборда привязаны ✅');
+
+if ($('btnReturnOrigin')) {
+    $('btnReturnOrigin').addEventListener('click', returnToOriginPoint);
+}

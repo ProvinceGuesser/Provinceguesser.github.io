@@ -753,3 +753,28 @@ html, body {
     border-radius: 999px;
     white-space: nowrap;
 }
+
+.btn-return-origin {
+    position: absolute;
+    bottom: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 16;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(20, 20, 35, 0.92);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px);
+    transition: 0.2s ease;
+}
+
+.btn-return-origin:hover {
+    transform: translateX(-50%) translateY(-2px);
+    background: rgba(35, 35, 60, 0.97);
+}
